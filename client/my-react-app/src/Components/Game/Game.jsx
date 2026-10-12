@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import axios from 'axios';
 import rulesImage from './CoupRule.png';
 import cheatSheetImage from './CoupCheatSheet.png';
@@ -45,7 +46,6 @@ const Game = () => {
   const submitAction = (action, target = null) => {
     console.log(`Action: ${action} Target: ${target}`);
     socket.emit('submit-action', {
-      playerName: userName,
       action,
       target
     });
@@ -66,6 +66,15 @@ const Game = () => {
       setCountdown(null);
       setAwaitingResponse(null);
     });    
+
+    socket.on('clear-pending-decision', () => {
+      setCountdown(null);
+      setAwaitingResponse(null);
+      setDiscardPrompt(null);
+      setExchangeOptions(null);
+    });
+
+    socket.on('error-message', (message) => toast.error(message));
 
     socket.on('game-over', ({ winner }) => {
       setWinner(winner);
@@ -119,11 +128,13 @@ const Game = () => {
       socket.off('game-log');
       socket.off('awaiting-response');
       socket.off('clear-awaiting-response');
+      socket.off('clear-pending-decision');
+      socket.off('error-message');
       socket.off('game-over');
       socket.off('exchange-options');
       socket.off('awaiting-discard');
     };
-  }, [socket]);
+  }, [socket, userName]);
   
   useEffect(() => {
     if (countdown === null || countdown <= 0) return;
@@ -139,8 +150,6 @@ const Game = () => {
   useEffect(() => {
     if (!socket || !lobbyCode) return;
 
-    socket.emit('join-game', { lobbyCode });
-
     const handleGameUpdate = (gameData) => {
       console.log("Received game update:", gameData);
       setPlayers(gameData.players);
@@ -148,11 +157,18 @@ const Game = () => {
     };
 
     socket.on('game-update', handleGameUpdate);
+    socket.emit('join-lobby', { username: userName, lobby: lobbyCode }, (response) => {
+      if (response?.status === 'ok') {
+        socket.emit('join-game', { lobbyCode });
+      } else {
+        toast.error(response?.message || 'Unable to reconnect to this game.');
+      }
+    });
 
     return () => {
       socket.off('game-update', handleGameUpdate);
     };
-  }, [socket, lobbyCode]);
+  }, [socket, lobbyCode, userName]);
 
   useEffect(() => {
     if (winner && players.length > 0) {
@@ -177,6 +193,9 @@ const Game = () => {
   const opponents = players.filter(p => p.name !== userName);
   const isMyTurn = currentPlayer === userName;
   const mustCoup = myPlayer?.money >= 10;
+  const actionsBlocked = !isMyTurn || Boolean(
+    awaitingResponse || discardPrompt || exchangeOptions || winner || myPlayer?.isDead
+  );
 
   return (
     <div className="game-page">
@@ -288,7 +307,7 @@ const Game = () => {
                 key={index}
                 player={player}
                 isOpponent={true}
-                isTargetable={isSelectingTarget}
+                isTargetable={isSelectingTarget && !player.isDead}
                 onTargetClick={(targetName) => {
                   submitAction(pendingAction, targetName);
                   setPendingAction(null);
@@ -341,7 +360,7 @@ const Game = () => {
               setIsSelectingTarget(false);
               submitAction('income');
             }}
-            disabled={!isMyTurn || mustCoup}
+            disabled={actionsBlocked || mustCoup}
           >
             {mustCoup ? "You must Coup!": "Income"}
           </button>
@@ -352,7 +371,7 @@ const Game = () => {
               setPendingAction('coup');
               setIsSelectingTarget(true);
             }}
-            disabled={currentPlayer !== userName || myPlayer?.money < 7}
+            disabled={actionsBlocked || myPlayer?.money < 7}
           >
             Coup
           </button>
@@ -363,7 +382,7 @@ const Game = () => {
               setIsSelectingTarget(false);
               submitAction('foreign aid');
             }}
-            disabled={!isMyTurn || mustCoup}
+            disabled={actionsBlocked || mustCoup}
           >
             {mustCoup ? "You must Coup!": "Foreign Aid"}
           </button>
@@ -374,7 +393,7 @@ const Game = () => {
               setPendingAction('steal');
               setIsSelectingTarget(true);
             }}
-            disabled={!isMyTurn || mustCoup}
+            disabled={actionsBlocked || mustCoup}
           >
             {mustCoup ? "You must Coup!": "Steal"}
           </button>
@@ -385,7 +404,7 @@ const Game = () => {
               setPendingAction('assassinate');
               setIsSelectingTarget(true);
             }}
-            disabled={!isMyTurn || mustCoup || myPlayer?.money < 3}
+            disabled={actionsBlocked || mustCoup || myPlayer?.money < 3}
           >
             {mustCoup ? "You must Coup!": "Assassinate"}
           </button>
@@ -396,7 +415,7 @@ const Game = () => {
               setIsSelectingTarget(false);
               submitAction('tax');
             }}
-            disabled={!isMyTurn || mustCoup}
+            disabled={actionsBlocked || mustCoup}
           >
             {mustCoup ? "You must Coup!": "Tax"}
           </button>
@@ -407,7 +426,7 @@ const Game = () => {
               setIsSelectingTarget(false);
               submitAction('exchange');
             }}
-            disabled={!isMyTurn || mustCoup}
+            disabled={actionsBlocked || mustCoup}
           >
             {mustCoup ? "You must Coup!": "Exchange"}
           </button>
@@ -434,7 +453,7 @@ const Game = () => {
                     : `${awaitingResponse.actor} is attempting to ${awaitingResponse.action}${awaitingResponse.target ? ` against ${awaitingResponse.target}` : ''}.`}
                 </p>
 
-                {(awaitingResponse.type === 'block'
+                {myPlayer && !myPlayer.isDead && (awaitingResponse.type === 'block'
                   ? userName !== awaitingResponse.blocker
                   : userName !== awaitingResponse.actor && awaitingResponse.challengeable !== false) && (
                   <button className="small-button" onClick={() => socket.emit('challenge')}>

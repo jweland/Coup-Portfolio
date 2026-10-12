@@ -75,6 +75,7 @@ const generateSixDigitCode = () => {
 function updateGameState(gameInstance, io) {
     for (let player of gameInstance.players) {
         const socketId = gameInstance.nameSocketMap[player.name];
+        if (!socketId) continue;
         const view = gameInstance.getPlayerView(socketId);
         io.to(socketId).emit('game-update', {
           players: view,

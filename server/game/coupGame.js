@@ -1,6 +1,8 @@
 const { buildNameSocketMap, buildNameIndexMap, buildPlayers, buildDeck, shuffle, broadcast, updateGameState } = require('./helperFunctions');
 const { Actions } = require('./helperConstants');
 
+const DISCONNECT_GRACE_MS = 60_000;
+
 class Game {
   constructor(players, sockets, io, lobbyCode) {
     this.nameSocketMap = buildNameSocketMap(players);
@@ -17,6 +19,7 @@ class Game {
     this.challengeTimer = null;
     this.pendingDiscard = null;
     this.gameOver = false;
+    this.disconnectTimers = new Map();
   
     this.broadcast = (msg) => broadcast(this.io, this.lobbyCode, msg);
     this.updateGameState = () => updateGameState(this, this.io);
@@ -48,6 +51,100 @@ class Game {
       this.resolveUnchallengedAction(response);
       this.io.to(this.lobbyCode).emit('clear-awaiting-response');
     }, 10000);
+  }
+
+  reconnectPlayer(playerName, socketID) {
+    const player = this.players[this.nameIndexMap[playerName]];
+    if (!player || this.gameOver) return false;
+
+    const disconnectTimer = this.disconnectTimers.get(playerName);
+    if (disconnectTimer) clearTimeout(disconnectTimer);
+    this.disconnectTimers.delete(playerName);
+    this.nameSocketMap[playerName] = socketID;
+    player.socketID = socketID;
+    player.isConnected = true;
+
+    this.updateGameState();
+    if (this.awaitingResponse) {
+      this.io.to(socketID).emit('awaiting-response', this.awaitingResponse);
+    }
+    if (this.pendingDiscard?.playerName === playerName) {
+      this.io.to(socketID).emit('awaiting-discard', {
+        player: playerName,
+        cards: player.influences
+      });
+    }
+    if (Array.isArray(player.exchangeCards)) {
+      this.io.to(socketID).emit('exchange-options', {
+        type: 'exchange',
+        ammount: player.influences.length,
+        actor: playerName,
+        cards: player.exchangeCards
+      });
+    }
+    this.broadcast(`${playerName} reconnected.`);
+    return true;
+  }
+
+  handleDisconnect(playerName, socketID) {
+    const player = this.players[this.nameIndexMap[playerName]];
+    if (!player || player.isDead || this.gameOver || this.nameSocketMap[playerName] !== socketID) return;
+
+    player.isConnected = false;
+    const previousTimer = this.disconnectTimers.get(playerName);
+    if (previousTimer) clearTimeout(previousTimer);
+
+    const timer = setTimeout(() => {
+      this.disconnectTimers.delete(playerName);
+      if (this.gameOver || this.nameSocketMap[playerName] !== socketID) return;
+      this.forfeitDisconnectedPlayer(playerName);
+    }, DISCONNECT_GRACE_MS);
+    this.disconnectTimers.set(playerName, timer);
+    this.broadcast(`${playerName} disconnected. They have 60 seconds to reconnect.`);
+  }
+
+  forfeitDisconnectedPlayer(playerName) {
+    const playerIndex = this.nameIndexMap[playerName];
+    const player = this.players[playerIndex];
+    if (!player || player.isDead || this.gameOver) return;
+
+    if (Array.isArray(player.exchangeCards)) {
+      const unkeptCards = [...player.exchangeCards];
+      for (const card of player.influences) {
+        const index = unkeptCards.indexOf(card);
+        if (index !== -1) unkeptCards.splice(index, 1);
+      }
+      this.deck.push(...unkeptCards);
+      this.deck = shuffle(this.deck);
+      delete player.exchangeCards;
+    }
+
+    player.influences = [];
+    player.isDead = true;
+    this.broadcast(`${playerName} forfeits after failing to reconnect.`);
+
+    if (this.pendingDiscard?.playerName === playerName) {
+      const { onComplete } = this.pendingDiscard;
+      this.pendingDiscard = null;
+      this.io.to(this.lobbyCode).emit('clear-pending-decision');
+      if (onComplete) onComplete();
+    }
+
+    if (this.gameOver || this.checkWinCondition()) return;
+
+    if (this.awaitingResponse?.actor === playerName) {
+      if (this.challengeTimer) clearTimeout(this.challengeTimer);
+      this.challengeTimer = null;
+      this.awaitingResponse = null;
+      this.challengeWindowOpen = false;
+      this.io.to(this.lobbyCode).emit('clear-awaiting-response');
+      if (this.currentPlayer === playerIndex) this.endTurn();
+    } else if (this.currentPlayer === playerIndex && !this.pendingDiscard) {
+      this.endTurn();
+    }
+
+    this.io.to(this.lobbyCode).emit('clear-pending-decision');
+    this.updateGameState();
   }
 
   handleChallenge(challengerName) {
@@ -224,10 +321,11 @@ class Game {
   }
   
   
-  handleSubmit(action, targetName = null) {
+  handleSubmit(action, targetName = null, submittingPlayerName = null) {
     console.log(`Handling action: ${action} Target: ${targetName}`);
   
     const player = this.players[this.currentPlayer];
+    if (submittingPlayerName && player?.name !== submittingPlayerName) return false;
     if (this.gameOver || !player || this.awaitingResponse || this.pendingDiscard ||
         player.isDead || player.exchangeCards) return;
   
@@ -427,6 +525,10 @@ class Game {
       this.awaitingResponse = null;
       this.challengeWindowOpen = false;
       this.pendingDiscard = null;
+      this.disconnectTimers.forEach(timer => clearTimeout(timer));
+      this.disconnectTimers.clear();
+      this.io.to(this.lobbyCode).emit('clear-awaiting-response');
+      this.io.to(this.lobbyCode).emit('clear-pending-decision');
       const winner = alivePlayers[0];
       this.broadcast(`${winner.name} wins the game!`);
       

@@ -15,7 +15,7 @@ const Lobby = () => {
   const navigate = useNavigate();
 
   const [players, setPlayers] = useState([]);
-  const allReady = players.length > 0 && players.every(p => p.ready);
+  const allReady = players.length >= 2 && players.length <= 6 && players.every(p => p.ready);
   const [isReady, setIsReady] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
 
@@ -52,11 +52,14 @@ const Lobby = () => {
       navigate(`/game?lobby=${lobbyCode}`);
     });
 
+    socket.on('error-message', (message) => toast.error(message));
+
     return () => {
       socket.off('lobby-update');
       socket.off('game-started');
+      socket.off('error-message');
     };
-  }, [socket, navigate, lobbyCode]);
+  }, [socket, navigate, lobbyCode, userName]);
 
   // Music controller
   useEffect(() => {
@@ -132,10 +135,11 @@ const Lobby = () => {
         <button
           className="readyUpButton"
           onClick={() => {
-            console.log(`${isReady ? 'Unreadying' : 'Readying'} as`, { lobbyCode, userName });
+            if (!players.some(player => player.name === userName) || gameStarted) return;
             socket.emit('playerReady', { lobbyCode, userName, ready: !isReady });
             setIsReady(!isReady);
           }}
+          disabled={!players.some(player => player.name === userName) || gameStarted}
         >
           {isReady ? 'Unready' : 'Ready Up'}
         </button>

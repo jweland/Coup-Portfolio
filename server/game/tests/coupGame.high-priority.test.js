@@ -255,7 +255,50 @@ describe('high-priority Coup rules', () => {
     expect(game.currentPlayer).toBe(0);
     expect(game.pendingDiscard).toBeNull();
     expect(game.awaitingResponse).toBeNull();
-    expect(ioEmit).toHaveBeenCalledTimes(2);
+    expect(ioEmit).toHaveBeenCalledTimes(4);
     expect(ioEmit).toHaveBeenCalledWith('game-over', { winner: 'Jillian' });
+  });
+
+  test('rejects an action when the submitting socket user is not the current player', () => {
+    const startingMoney = game.players[0].money;
+
+    expect(game.handleSubmit('income', null, 'Ty')).toBe(false);
+    expect(game.players[0].money).toBe(startingMoney);
+    expect(game.currentPlayer).toBe(0);
+  });
+
+  test('reconnecting within the grace period cancels the disconnect forfeiture', () => {
+    game.handleDisconnect('Jillian', 'sock1');
+
+    expect(game.players[0].isConnected).toBe(false);
+    expect(game.reconnectPlayer('Jillian', 'replacement-socket')).toBe(true);
+    jest.advanceTimersByTime(60_000);
+
+    expect(game.players[0].isConnected).toBe(true);
+    expect(game.nameSocketMap.Jillian).toBe('replacement-socket');
+    expect(game.players[0].isDead).toBe(false);
+    expect(game.gameOver).toBe(false);
+  });
+
+  test('reconnection restores a pending discard decision', () => {
+    game.pendingDiscard = { playerName: 'Jillian', onComplete: null };
+    game.handleDisconnect('Jillian', 'sock1');
+
+    game.reconnectPlayer('Jillian', 'replacement-socket');
+
+    expect(ioEmit).toHaveBeenCalledWith('awaiting-discard', {
+      player: 'Jillian',
+      cards: game.players[0].influences
+    });
+  });
+
+  test('forfeits a player who does not reconnect before the grace period expires', () => {
+    game.handleDisconnect('Jillian', 'sock1');
+    jest.advanceTimersByTime(60_000);
+
+    expect(game.players[0].isDead).toBe(true);
+    expect(game.players[0].influences).toEqual([]);
+    expect(game.gameOver).toBe(true);
+    expect(ioEmit).toHaveBeenCalledWith('game-over', { winner: 'Ty' });
   });
 });

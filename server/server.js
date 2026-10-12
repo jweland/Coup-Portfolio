@@ -8,6 +8,7 @@ const bcrypt = require("bcrypt");
 const { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit } = require("firebase/firestore");
 
 const Game = require('./game/coupGame.js');
+const { canStartGame, isCurrentPlayer } = require('./game/lobbyRules');
 
 // Initialize Express app and HTTP server
 const app = express();
@@ -311,8 +312,28 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Enfore player limit
-    if (lobbies[lobby].length >= MAX_PLAYERS_PER_LOBBY) {
+    const existingPlayer = lobbies[lobby].some(player => player.name === username);
+    const game = games[lobby];
+    const activeSocket = Object.entries(userSockets).find(([socketID, user]) =>
+      user.username === username && user.lobby === lobby &&
+      io.sockets.sockets.has(socketID)
+    );
+    if (activeSocket && activeSocket[0] !== socket.id) {
+      if (callback && typeof callback === "function") {
+        callback({ status: "error", message: "This player is already connected to the lobby" });
+      }
+      return;
+    }
+
+    if (game && !game.players.some(player => player.name === username)) {
+      if (callback && typeof callback === "function") {
+        callback({ status: "error", message: "Game already started" });
+      }
+      return;
+    }
+
+    // Enforce the player limit only for new lobby members.
+    if (!existingPlayer && lobbies[lobby].length >= MAX_PLAYERS_PER_LOBBY) {
       console.log(`Lobby ${lobby} is full.`);
       if (callback && typeof callback === "function") {
         callback({ status: "error", message: "Lobby is full" });
@@ -320,12 +341,16 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (!lobbies[lobby].some(player => player.name === username)) {
+    if (!existingPlayer) {
       lobbies[lobby].push({ name: username, ready: false });
-      userSockets[socket.id] = { username, lobby };
     }
 
+    Object.entries(userSockets).forEach(([socketID, user]) => {
+      if (user.username === username && user.lobby === lobby) delete userSockets[socketID];
+    });
+    userSockets[socket.id] = { username, lobby };
     socket.join(lobby);
+    if (game) game.reconnectPlayer(username, socket.id);
     console.log(`${username} joined lobby: ${lobby}`);
 
     io.to(lobby).emit('lobby-update', lobbies[lobby]);
@@ -337,6 +362,8 @@ io.on('connection', (socket) => {
 
   // Handle Leave lobby
   socket.on('leave-lobby', ({ lobbyCode, userName }) => {
+    const user = userSockets[socket.id];
+    if (!user || user.lobby !== lobbyCode || user.username !== userName || games[lobbyCode]) return;
     if (lobbies[lobbyCode]) {
       lobbies[lobbyCode] = lobbies[lobbyCode].filter(p => p.name !== userName);
       io.to(lobbyCode).emit('lobby-update', lobbies[lobbyCode]);
@@ -350,6 +377,8 @@ io.on('connection', (socket) => {
 
   // Handle Ready Up
   socket.on('playerReady', ({ lobbyCode, userName, ready }) => {
+    const user = userSockets[socket.id];
+    if (!user || user.lobby !== lobbyCode || user.username !== userName || games[lobbyCode]) return;
     if (!lobbies[lobbyCode]) {
       console.error(`Attempt to ready in a non-existent lobby: ${lobbyCode}`);
       return;
@@ -366,7 +395,8 @@ io.on('connection', (socket) => {
 
   // Handle starting the game
   socket.on('start-game', ({ lobbyCode }) => {
-    if (!lobbies[lobbyCode]) {
+    const user = userSockets[socket.id];
+    if (!user || user.lobby !== lobbyCode || !lobbies[lobbyCode]) {
       console.error(`Attempt to start a non-existent lobby: ${lobbyCode}`);
       return;
     }
@@ -375,16 +405,28 @@ io.on('connection', (socket) => {
       console.log(`Game already started for lobby ${lobbyCode}`);
       return;
     }
+
+    if (!lobbies[lobbyCode].some(player => player.name === user.username) ||
+        !canStartGame(lobbies[lobbyCode], MAX_PLAYERS_PER_LOBBY)) {
+      socket.emit('error-message', 'A game requires 2 to 6 players, and everyone must be ready.');
+      return;
+    }
   
     const players = [...lobbies[lobbyCode]];
-  
+
     // Get all sockets for players in the lobby
     const sockets = players.map(p => {
-      const socketEntry = Object.entries(userSockets).find(([, val]) =>
-        val.username === p.name && val.lobby === lobbyCode
+      const socketEntry = Object.entries(userSockets).find(([socketID, val]) =>
+        val.username === p.name && val.lobby === lobbyCode &&
+        io.sockets.sockets.has(socketID)
       );
       return socketEntry ? socketEntry[0] : null;
-    }).filter(Boolean);
+    });
+
+    if (sockets.some(socketID => !socketID)) {
+      socket.emit('error-message', 'All lobby players must be connected before the game starts.');
+      return;
+    }
   
     // Attach socketID to each player
     const playersWithSockets = players.map((player, index) => ({
@@ -401,6 +443,8 @@ io.on('connection', (socket) => {
 
   // Handle switch from lobby to game
   socket.on('join-game', ({ lobbyCode }) => {
+    const user = userSockets[socket.id];
+    if (!user || user.lobby !== lobbyCode) return;
     socket.join(lobbyCode);
     console.log(`${socket.id} joined game room ${lobbyCode}`);
   
@@ -428,7 +472,10 @@ io.on('connection', (socket) => {
     const user = userSockets[socket.id];
     if (user) {
       const { username, lobby } = user;
-      if (lobbies[lobby]) {
+      const game = games[lobby];
+      if (game) {
+        game.handleDisconnect(username, socket.id);
+      } else if (lobbies[lobby]) {
         lobbies[lobby] = lobbies[lobby].filter((player) => player.name !== username);
         io.to(lobby).emit('lobby-update', lobbies[lobby]);
 
@@ -470,7 +517,7 @@ io.on('connection', (socket) => {
   // Handle Submit Exhange
   socket.on('submit-exchange', ({ lobbyCode, chosenCards }) => {
     const user = userSockets[socket.id];
-    if (!user) return;
+    if (!user || user.lobby !== lobbyCode) return;
   
     const { username } = user;
     const game = games[lobbyCode];
@@ -482,7 +529,7 @@ io.on('connection', (socket) => {
   // Handle Submit Discard
   socket.on('submit-discard', ({ lobbyCode, card }) => {
     const user = userSockets[socket.id];
-    if (!user) return;
+    if (!user || user.lobby !== lobbyCode) return;
 
     const { username } = user;
     const game = games[lobbyCode];
@@ -492,22 +539,22 @@ io.on('connection', (socket) => {
   });
 
   // Handle Action submission
-  socket.on('submit-action', ({ playerName, action, target }) => {    
+  socket.on('submit-action', ({ action, target }) => {
     const user = userSockets[socket.id];
     if (!user) return;
   
-    const { lobby } = user;
+    const { lobby, username } = user;
     const game = games[lobby];
     if (!game) return;
-  
-    const currentPlayer = game.players[game.currentPlayer];
 
-    if (currentPlayer.name !== playerName) {
+    if (!isCurrentPlayer(game, username)) {
       socket.emit('error-message', 'It is not your turn.');
       return;
     }
   
-    game.handleSubmit(action, target);
+    if (game.handleSubmit(action, target, username) === false) {
+      socket.emit('error-message', 'It is not your turn.');
+    }
   });
 });
 
