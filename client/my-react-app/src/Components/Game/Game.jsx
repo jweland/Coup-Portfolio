@@ -248,13 +248,13 @@ const Game = () => {
       {/* Discard Popup */}
       {discardPrompt && (
         <div className="popup-overlay">
-          <div className="popup-content exchange-popup">
+          <div className="popup-content exchange-popup discard-popup">
             <h2>Choose a Card to Discard</h2>
             <div className="exchange-card-grid">
               {discardPrompt.cards.map((card, index) => (
                 <div
                   key={index}
-                  className={`exchange-card-wrapper ${discardPrompt.selected === index ? 'selected' : ''}`}
+                  className={`exchange-card-wrapper discard-card-wrapper ${discardPrompt.selected === index ? 'selected' : ''}`}
                   onClick={() => setDiscardPrompt({ ...discardPrompt, selected: index })}
                 >
                   <Card role={card} isRevealed={true} />

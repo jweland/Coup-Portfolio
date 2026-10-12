@@ -730,6 +730,10 @@
   border-radius: 12px;
 }
 
+.discard-card-wrapper {
+  padding: 10px;
+}
+
 .exchange-card-wrapper:hover {
   transform: scale(1.05);
 }
