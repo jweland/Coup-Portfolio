@@ -28,9 +28,9 @@ jest.mock('../helperFunctions', () => ({
     let game;
   
     beforeEach(() => {
-      game = new Game(['Jillian', 'Ty'], {}, {}, 'XYZ');
-      // fake timers to please jest
       jest.useFakeTimers();
+      const io = { to: jest.fn(() => ({ emit: jest.fn() })) };
+      game = new Game(['Jillian', 'Ty'], {}, io, 'XYZ');
     });
   
     test('initializes with 2 influences per player', () => {
@@ -44,17 +44,19 @@ jest.mock('../helperFunctions', () => ({
       expect(game.players[0].money).toBe(start + 1);
     });
 
-    test('foreign aid adds 2 coins to current player', () => {
+    test('foreign aid adds 2 coins after the response window resolves', () => {
       const start = game.players[0].money;
       game.handleSubmit('foreign_aid');
+      expect(game.players[0].money).toBe(start);
+      game.resolveUnchallengedAction();
       expect(game.players[0].money).toBe(start + 2);
     });
 
-    test('foreign aid adds 2 coins to current player if its the second players turn', () => {
-      const start = game.players[0].money;
+    test('foreign aid adds 2 coins to the second player after resolution', () => {
       const start2 = game.players[1].money;
       game.endTurn();
       game.handleSubmit('foreign_aid');
+      game.resolveUnchallengedAction();
       expect(game.players[1].money).toBe(start2 + 2);
     });
 
@@ -65,7 +67,8 @@ jest.mock('../helperFunctions', () => ({
         type: 'action',
         action: 'tax',
         actor: 'Jillian',
-        requiredCard: 'duke'
+        requiredCards: ['duke'],
+        canBeBlocked: false
       });
       expect(game.challengeWindowOpen).toBe(true);
       game.resolveUnchallengedAction();
@@ -78,7 +81,8 @@ jest.mock('../helperFunctions', () => ({
         type: 'action',
         action: 'tax',
         actor: 'Jillian',
-        requiredCard: 'duke'
+        requiredCards: ['duke'],
+        canBeBlocked: false
       });
       expect(game.challengeWindowOpen).toBe(true);
       game.resolveUnchallengedAction();
@@ -94,7 +98,8 @@ jest.mock('../helperFunctions', () => ({
         action: 'steal',
         actor: 'Jillian',
         target: 'Ty',
-        requiredCard: 'captain'
+        requiredCards: ['captain'],
+        canBeBlocked: true
       });
       expect(game.challengeWindowOpen).toBe(true);
       game.resolveUnchallengedAction();
@@ -111,7 +116,8 @@ jest.mock('../helperFunctions', () => ({
         action: 'steal',
         actor: 'Jillian',
         target: 'Ty',
-        requiredCard: 'captain'
+        requiredCards: ['captain'],
+        canBeBlocked: true
       });
       expect(game.challengeWindowOpen).toBe(true);
       game.resolveUnchallengedAction();
@@ -128,7 +134,8 @@ jest.mock('../helperFunctions', () => ({
         action: 'steal',
         actor: 'Jillian',
         target: 'Ty',
-        requiredCard: 'captain'
+        requiredCards: ['captain'],
+        canBeBlocked: true
       });
       expect(game.challengeWindowOpen).toBe(true);
       game.resolveUnchallengedAction();
@@ -144,8 +151,10 @@ jest.mock('../helperFunctions', () => ({
         action: 'assassinate',
         actor: 'Jillian',
         target: 'Ty',
-        requiredCard: 'assassin'
+        requiredCards: ['assassin'],
+        canBeBlocked: true
       });
+      expect(game.players[0].money).toBe(1);
       expect(game.challengeWindowOpen).toBe(true);
       game.resolveUnchallengedAction();
     });
@@ -155,6 +164,7 @@ jest.mock('../helperFunctions', () => ({
       game.players[1].influences = ['duke', 'assassin']; // Ty
       game.handleSubmit('coup', "Ty");
       expect(game.players[0].money).toBe(0);
+      game.handleDiscard('Ty', 'duke');
       expect(game.players[1].influences.length).toBe(1);
     });
 
