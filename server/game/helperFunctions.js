@@ -20,12 +20,9 @@ const shuffle = (arr) => {
         return [];
     }
 
-    for (let i = 0; i < arr.length * 2; i++) {
-        const one = i % arr.length;
-        const two = Math.floor(Math.random() * arr.length);
-        let temp = arr[one];
-        arr[one] = arr[two];
-        arr[two] = temp;
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
 };
