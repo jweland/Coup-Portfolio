@@ -200,6 +200,26 @@ describe('high-priority Coup rules', () => {
     }
   );
 
+  test('Coup immediately removes influence and cannot be blocked or challenged', () => {
+    game.players[0].money = 7;
+    game.players[1].influences = ['contessa', 'duke'];
+
+    game.handleSubmit('coup', 'Ty');
+
+    expect(game.players[0].money).toBe(0);
+    expect(game.pendingDiscard.playerName).toBe('Ty');
+    expect(game.awaitingResponse).toBeNull();
+    expect(ioEmit).toHaveBeenCalledWith('awaiting-discard', expect.objectContaining({
+      player: 'Ty'
+    }));
+
+    game.handleBlock('Ty');
+    game.handleChallenge('Ty');
+
+    expect(game.pendingDiscard.playerName).toBe('Ty');
+    expect(game.players[1].influences).toEqual(['contessa', 'duke']);
+  });
+
   test('actor cannot challenge their own action, and an eliminated player cannot challenge', () => {
     game.players[0].influences = ['captain', 'ambassador'];
     game.handleSubmit('tax');
