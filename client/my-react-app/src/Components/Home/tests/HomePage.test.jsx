@@ -53,6 +53,10 @@ describe('HomePage', () => {
     fireEvent.click(button);
 
     await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:5001/createlobby',
+        { method: 'POST' }
+      );
       expect(mockEmit).toHaveBeenCalledWith(
         'join-lobby',
         { username: 'test-user', lobby: mockLobbyCode },

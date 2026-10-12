@@ -291,7 +291,7 @@ app.post("/update-stats", async (req, res) => {
 });
 
 // Create a new lobby
-app.get('/createlobby', (req, res) => {
+app.post('/createlobby', (req, res) => {
   let code = '';
 
   while (!code || lobbies[code]) {
