@@ -15,6 +15,8 @@ class Game {
     this.awaitingResponse = null;
     this.challengeWindowOpen = false;
     this.challengeTimer = null;
+    this.pendingDiscard = null;
+    this.gameOver = false;
   
     this.broadcast = (msg) => broadcast(this.io, this.lobbyCode, msg);
     this.updateGameState = () => updateGameState(this, this.io);
@@ -43,66 +45,73 @@ class Game {
   }
 
   handleChallenge(challengerName) {
-    const { type, actor, blocker, requiredCards, requiredCard, action, target } = this.awaitingResponse;
+    const response = this.awaitingResponse;
+    if (!response || this.pendingDiscard || this.gameOver) return;
+
+    const { type, actor, blocker, requiredCards, requiredCard, action } = response;
     const challenger = this.players[this.nameIndexMap[challengerName]];
-  
-    clearTimeout(this.challengeTimer);
-    this.challengeWindowOpen = false;
-  
-    const claimedPlayerName = (type === 'block') ? blocker : actor;
+    const claimedPlayerName = type === 'block' ? blocker : actor;
     const claimedPlayer = this.players[this.nameIndexMap[claimedPlayerName]];
+
+    if (!challenger || challenger.isDead || !claimedPlayer || challengerName === claimedPlayerName) return;
+    if (type === 'action' && response.challengeable === false) return;
+    if (type === 'block' && challengerName === blocker) return;
+
+    clearTimeout(this.challengeTimer);
+    this.challengeTimer = null;
+    this.challengeWindowOpen = false;
   
     const hasRequiredCard = Array.isArray(requiredCards)
       ? claimedPlayer.influences.some(card => requiredCards.includes(card))
       : claimedPlayer.influences.includes(requiredCard);
   
     if (hasRequiredCard) {
-      // Challenge fails — claimed player shows proof
       const index = Array.isArray(requiredCards)
         ? claimedPlayer.influences.findIndex(card => requiredCards.includes(card))
         : claimedPlayer.influences.indexOf(requiredCard);
-  
-      claimedPlayer.influences.splice(index, 1);
+      const revealedCard = claimedPlayer.influences.splice(index, 1)[0];
+      this.deck.push(revealedCard);
+      this.deck = shuffle(this.deck);
       claimedPlayer.influences.push(this.deck.pop());
-  
-      if (challenger.influences.length === 0) challenger.isDead = true;
-      this.checkWinCondition();
-  
-      this.broadcast(`${challengerName} challenges ${claimedPlayerName}'s ${action}... and fails!`);
-      console.log(`Challenger: ${challengerName}`);
-      console.log(`IndexMap entry:`, this.nameIndexMap[challengerName]);
-      console.log(`Player:`, this.players[this.nameIndexMap[challengerName]]);
 
-
-      if (type === 'block') {
-        this.awaitingResponse = null;
-        this.endTurn();
-        this.updateGameState();
-      } else {
-        this.resolveUnchallengedAction(); 
-      }
-  
-    } else {
-      // Challenge succeeds
-      const lostCard = claimedPlayer.influences.pop();
-      if (claimedPlayer.influences.length === 0) claimedPlayer.isDead = true;
-      this.checkWinCondition();
-  
-      this.broadcast(`${challengerName} challenges ${claimedPlayerName}'s ${action}... and succeeds! ${claimedPlayerName} loses a ${lostCard}.`);
-  
+      this.broadcast(`${challengerName} challenges ${claimedPlayerName}'s ${action} and fails; ${claimedPlayerName} reveals ${revealedCard}.`);
       this.awaitingResponse = null;
-      this.endTurn();
-      this.updateGameState();
+      this.promptDiscard(challengerName, () => {
+        if (this.gameOver) return;
+        if (type === 'block') {
+          this.broadcast(`${blocker} successfully blocks the ${action}.`);
+          this.endTurn();
+          this.updateGameState();
+        } else {
+          this.resolveUnchallengedAction(response);
+        }
+      });
+    } else {
+      this.broadcast(`${challengerName} challenges ${claimedPlayerName}'s ${action} and succeeds.`);
+      this.awaitingResponse = null;
+      this.promptDiscard(claimedPlayerName, () => {
+        if (this.gameOver) return;
+        if (type === 'block') {
+          this.resolveUnchallengedAction({ ...response, type: 'action' });
+        } else {
+          this.endTurn();
+          this.updateGameState();
+        }
+      });
     }
   
     this.io.to(this.lobbyCode).emit('clear-awaiting-response');
   }
     
   handleBlock(blockerName) {
-    if (!this.awaitingResponse) return;
+    if (!this.awaitingResponse || this.pendingDiscard || this.gameOver) return;
     
-    const { action, target, canBeBlocked } = this.awaitingResponse;
-    if (!canBeBlocked || blockerName !== target) {
+    const response = this.awaitingResponse;
+    const { action, target, actor, canBeBlocked } = response;
+    const blocker = this.players[this.nameIndexMap[blockerName]];
+    const isForeignAidBlock = action === 'foreign aid';
+    if (!blocker || blocker.isDead || blockerName === actor || !canBeBlocked ||
+        (!isForeignAidBlock && blockerName !== target)) {
       console.log(`Block not allowed.`);
       return;
     }
@@ -120,9 +129,10 @@ class Game {
     this.awaitingResponse = {
       type: 'block',
       action,
-      actor: this.awaitingResponse.actor,
+      actor,
       blocker: blockerName,
       requiredCards: blockingCards,
+      target,
     };
   
     this.broadcast(`${blockerName} attempts to block ${action}. Waiting for challenge...`);
@@ -134,12 +144,17 @@ class Game {
   handleExchangeSelection(playerName, chosenCards) {
     const player = this.players[this.nameIndexMap[playerName]];
     
-    if (!player.exchangeCards || chosenCards.length !== 2) return;
-  
-    const validChoices = chosenCards.every(card => player.exchangeCards.includes(card));
-    if (!validChoices) return;
-  
-    const returnCards = player.exchangeCards.filter(card => !chosenCards.includes(card));
+    if (!player || player.isDead || !Array.isArray(player.exchangeCards) || !Array.isArray(chosenCards) ||
+        chosenCards.length !== player.influences.length) return;
+
+    const offeredCards = [...player.exchangeCards];
+    for (const card of chosenCards) {
+      const cardIndex = offeredCards.indexOf(card);
+      if (cardIndex === -1) return;
+      offeredCards.splice(cardIndex, 1);
+    }
+
+    const returnCards = offeredCards;
     this.deck.push(...returnCards);
     this.deck = shuffle(this.deck);
   
@@ -151,18 +166,21 @@ class Game {
     this.updateGameState();
   }
 
-  promptDiscard(playerName) {
-    console.log(`Name: ${playerName}`)
+  promptDiscard(playerName, onComplete = null) {
     const player = this.players[this.nameIndexMap[playerName]];
-    console.log(`Player Info: ${player}`)
+    if (!player || player.influences.length === 0 || this.pendingDiscard) return;
+
     if (player.influences.length === 1) {
       const lost = player.influences.pop();
       player.isDead = true;
       this.broadcast(`${playerName} loses their last influence (${lost}).`);
       this.checkWinCondition();
       this.updateGameState();
+      if (!this.gameOver && onComplete) onComplete();
       return;
     }
+
+    this.pendingDiscard = { playerName, onComplete };
   
     this.io.to(this.nameSocketMap[playerName]).emit('awaiting-discard', {
       player: playerName,
@@ -174,6 +192,8 @@ class Game {
   
   handleDiscard(playerName, chosenCard) {
     const player = this.players[this.nameIndexMap[playerName]];
+    if (!player || player.isDead || !this.pendingDiscard ||
+        this.pendingDiscard.playerName !== playerName) return;
   
     const cardIndex = player.influences.indexOf(chosenCard);
     if (cardIndex === -1) {
@@ -187,6 +207,12 @@ class Game {
     this.broadcast(`${playerName} discards a ${chosenCard}.`);
     this.checkWinCondition();
     this.updateGameState();
+
+    if (this.pendingDiscard?.playerName === playerName) {
+      const { onComplete } = this.pendingDiscard;
+      this.pendingDiscard = null;
+      if (!this.gameOver && onComplete) onComplete();
+    }
   }
   
   
@@ -194,7 +220,7 @@ class Game {
     console.log(`Handling action: ${action} Target: ${targetName}`);
   
     const player = this.players[this.currentPlayer];
-    if (player.isDead) return;
+    if (this.gameOver || this.awaitingResponse || this.pendingDiscard || player.isDead || player.exchangeCards) return;
   
     const target = targetName ? this.players[this.nameIndexMap[targetName]] : null;
   
@@ -215,7 +241,7 @@ class Game {
           type: 'action',
           action: 'foreign aid',
           actor: player.name,
-          requiredCards: ['duke'], // Blockable by Duke
+          challengeable: false,
           canBeBlocked: true,
         };
         this.challengeWindowOpen = true;
@@ -240,7 +266,9 @@ class Game {
   
       case this.actions.ASSASSINATE:
         if (player.money < 3 || !target || target.isDead) return;
-  
+        player.money -= 3;
+        this.updateGameState();
+
         this.awaitingResponse = {
           type: 'action',
           action: 'assassinate',
@@ -293,6 +321,7 @@ class Game {
         this.broadcast(`${player.name} coups ${target.name}.`);
         this.checkWinCondition();
         this.promptDiscard(target.name);
+        if (this.gameOver) return;
         break;
   
       default:
@@ -305,8 +334,9 @@ class Game {
     this.updateGameState();
   }
   
-  resolveUnchallengedAction() {
-    const { type, action, actor, target, blocker } = this.awaitingResponse || {};
+  resolveUnchallengedAction(response = this.awaitingResponse) {
+    if (!response || this.gameOver) return;
+    const { type, action, actor, target, blocker } = response;
     const actorPlayer = this.players[this.nameIndexMap[actor]];
     const targetPlayer = target ? this.players[this.nameIndexMap[target]] : null;
   
@@ -335,11 +365,11 @@ class Game {
         break;
   
       case 'assassinate':
-        actorPlayer.money -= 3;
         if (targetPlayer.influences.length === 0) targetPlayer.isDead = true;
         this.broadcast(`${actor} successfully assassinates ${target}.`);
         this.checkWinCondition()
         this.promptDiscard(target);
+        if (this.gameOver) return;
         break;
   
       case 'tax':
@@ -360,7 +390,7 @@ class Game {
       
           this.io.to(this.nameSocketMap[actor]).emit('exchange-options', {
               type: 'exchange',
-              ammount: drawCount,
+              ammount: influenceCount,
               actor,
               cards: actorPlayer.exchangeCards
           });
@@ -376,14 +406,19 @@ class Game {
   }
   
   checkWinCondition() {
+    if (this.gameOver) return true;
+
     const alivePlayers = this.players.filter(player => !player.isDead);
   
     if (alivePlayers.length === 1) {
+      this.gameOver = true;
       const winner = alivePlayers[0];
       this.broadcast(`${winner.name} wins the game!`);
       
       this.io.to(this.lobbyCode).emit('game-over', { winner: winner.name });
+      return true;
     }
+    return false;
   }  
 
   getPlayerView(socketID) {

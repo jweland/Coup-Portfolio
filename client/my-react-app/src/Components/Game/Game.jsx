@@ -416,7 +416,7 @@ const Game = () => {
         {/* Challenge/Block Overlay*/}
         {awaitingResponse && (
           ((awaitingResponse.type === 'action' && userName !== awaitingResponse.actor) ||
-          (awaitingResponse.type === 'block' && userName === awaitingResponse.actor)) && (
+          (awaitingResponse.type === 'block' && userName !== awaitingResponse.blocker)) && (
             <div className="popup-overlay">
               <div className="popup-content" style={{ padding: '20px', textAlign: 'center', color: 'white' }}>
                 {countdown !== null && (
@@ -434,11 +434,19 @@ const Game = () => {
                     : `${awaitingResponse.actor} is attempting to ${awaitingResponse.action}${awaitingResponse.target ? ` against ${awaitingResponse.target}` : ''}.`}
                 </p>
 
-                <button className="small-button" onClick={() => socket.emit('challenge')}>
-                  Challenge
-                </button>
+                {(awaitingResponse.type === 'block'
+                  ? userName !== awaitingResponse.blocker
+                  : userName !== awaitingResponse.actor && awaitingResponse.challengeable !== false) && (
+                  <button className="small-button" onClick={() => socket.emit('challenge')}>
+                    Challenge
+                  </button>
+                )}
 
-                {awaitingResponse.type === 'action' && awaitingResponse.target === userName && (
+                {awaitingResponse.type === 'action' &&
+                  (awaitingResponse.action === 'foreign aid'
+                    ? userName !== awaitingResponse.actor
+                    : awaitingResponse.target === userName) &&
+                  myPlayer && !myPlayer.isDead && (
                   <button className="small-button" onClick={() => socket.emit('block')}>
                     Block
                   </button>
@@ -450,8 +458,8 @@ const Game = () => {
 
         {/* Waiting Timer */}
         {awaitingResponse && !(
-            (awaitingResponse.type === 'action' && userName !== awaitingResponse.actor) ||
-            (awaitingResponse.type === 'block' && userName === awaitingResponse.actor)
+            (awaitingResponse.type === 'action' && userName === awaitingResponse.actor) ||
+            (awaitingResponse.type === 'block' && userName === awaitingResponse.blocker)
           ) && (
             <div className="popup-overlay">
               <div className="popup-content" style={{ padding: '20px', textAlign: 'center', color: 'white' }}>
