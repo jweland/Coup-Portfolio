@@ -184,4 +184,78 @@ describe('high-priority Coup rules', () => {
     expect(game.deck).toEqual(['duke', 'assassin']);
     expect(game.currentPlayer).toBe(1);
   });
+
+  test.each(['coup', 'steal', 'assassinate'])(
+    '%s rejects targeting the acting player',
+    action => {
+      game.players[0].money = 7;
+      const startingInfluences = [...game.players[0].influences];
+
+      game.handleSubmit(action, 'Jillian');
+
+      expect(game.players[0].money).toBe(7);
+      expect(game.players[0].influences).toEqual(startingInfluences);
+      expect(game.awaitingResponse).toBeNull();
+      expect(game.currentPlayer).toBe(0);
+    }
+  );
+
+  test('actor cannot challenge their own action, and an eliminated player cannot challenge', () => {
+    game.players[0].influences = ['captain', 'ambassador'];
+    game.handleSubmit('tax');
+    const response = game.awaitingResponse;
+
+    game.handleChallenge('Jillian');
+    expect(game.awaitingResponse).toBe(response);
+
+    game.players[1].isDead = true;
+    game.handleChallenge('Ty');
+    expect(game.awaitingResponse).toBe(response);
+    expect(game.pendingDiscard).toBeNull();
+  });
+
+  test('actor cannot block their own Foreign Aid and an eliminated player cannot block', () => {
+    game.handleSubmit('foreign_aid');
+    const response = game.awaitingResponse;
+
+    game.handleBlock('Jillian');
+    expect(game.awaitingResponse).toBe(response);
+
+    game.players[1].isDead = true;
+    game.handleBlock('Ty');
+    expect(game.awaitingResponse).toBe(response);
+  });
+
+  test('terminal game state rejects actions, responses, discards, and exchanges', () => {
+    game.handleSubmit('tax');
+    game.players[1].isDead = true;
+    expect(game.checkWinCondition()).toBe(true);
+
+    const moneyAtGameEnd = game.players[0].money;
+    game.players[0].exchangeCards = ['duke', 'captain'];
+
+    game.handleSubmit('income');
+    game.handleSubmit('foreign_aid');
+    game.handleChallenge('Jillian');
+    game.handleBlock('Jillian');
+    game.resolveUnchallengedAction({
+      type: 'action',
+      action: 'tax',
+      actor: 'Jillian'
+    });
+    game.handleDiscard('Jillian', 'duke');
+    game.handleExchangeSelection('Jillian', ['captain', 'duke']);
+    game.endTurn();
+
+    expect(game.players[0].money).toBe(moneyAtGameEnd);
+    expect(game.players[0].influences).toHaveLength(2);
+    expect(game.players[0].exchangeCards).toEqual(['duke', 'captain']);
+    expect(game.players[0].isDead).toBe(false);
+    expect(game.gameOver).toBe(true);
+    expect(game.currentPlayer).toBe(0);
+    expect(game.pendingDiscard).toBeNull();
+    expect(game.awaitingResponse).toBeNull();
+    expect(ioEmit).toHaveBeenCalledTimes(2);
+    expect(ioEmit).toHaveBeenCalledWith('game-over', { winner: 'Jillian' });
+  });
 });

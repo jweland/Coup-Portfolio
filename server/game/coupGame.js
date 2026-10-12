@@ -28,6 +28,8 @@ class Game {
   }
   
   endTurn (){
+    if (this.gameOver || this.players.length === 0) return;
+
     let next = (this.currentPlayer + 1) % this.players.length;
     while (this.players[next].isDead) {
       next = (next + 1) % this.players.length;
@@ -36,17 +38,21 @@ class Game {
   }
 
   startChallengeTimer() {
+    if (this.gameOver || !this.awaitingResponse) return;
     if (this.challengeTimer) clearTimeout(this.challengeTimer);
-  
+
+    const response = this.awaitingResponse;
     this.challengeTimer = setTimeout(() => {
-      this.resolveUnchallengedAction();
+      if (this.awaitingResponse !== response || this.gameOver) return;
+      this.challengeTimer = null;
+      this.resolveUnchallengedAction(response);
       this.io.to(this.lobbyCode).emit('clear-awaiting-response');
     }, 10000);
   }
 
   handleChallenge(challengerName) {
     const response = this.awaitingResponse;
-    if (!response || this.pendingDiscard || this.gameOver) return;
+    if (!response || !['action', 'block'].includes(response.type) || this.pendingDiscard || this.gameOver) return;
 
     const { type, actor, blocker, requiredCards, requiredCard, action } = response;
     const challenger = this.players[this.nameIndexMap[challengerName]];
@@ -104,7 +110,8 @@ class Game {
   }
     
   handleBlock(blockerName) {
-    if (!this.awaitingResponse || this.pendingDiscard || this.gameOver) return;
+    if (!this.awaitingResponse || this.awaitingResponse.type !== 'action' ||
+        this.pendingDiscard || this.gameOver) return;
     
     const response = this.awaitingResponse;
     const { action, target, actor, canBeBlocked } = response;
@@ -144,7 +151,8 @@ class Game {
   handleExchangeSelection(playerName, chosenCards) {
     const player = this.players[this.nameIndexMap[playerName]];
     
-    if (!player || player.isDead || !Array.isArray(player.exchangeCards) || !Array.isArray(chosenCards) ||
+    if (this.gameOver || this.pendingDiscard || !player || player.isDead ||
+        !Array.isArray(player.exchangeCards) || !Array.isArray(chosenCards) ||
         chosenCards.length !== player.influences.length) return;
 
     const offeredCards = [...player.exchangeCards];
@@ -168,7 +176,7 @@ class Game {
 
   promptDiscard(playerName, onComplete = null) {
     const player = this.players[this.nameIndexMap[playerName]];
-    if (!player || player.influences.length === 0 || this.pendingDiscard) return;
+    if (this.gameOver || !player || player.influences.length === 0 || this.pendingDiscard) return;
 
     if (player.influences.length === 1) {
       const lost = player.influences.pop();
@@ -192,7 +200,7 @@ class Game {
   
   handleDiscard(playerName, chosenCard) {
     const player = this.players[this.nameIndexMap[playerName]];
-    if (!player || player.isDead || !this.pendingDiscard ||
+    if (this.gameOver || !player || player.isDead || !this.pendingDiscard ||
         this.pendingDiscard.playerName !== playerName) return;
   
     const cardIndex = player.influences.indexOf(chosenCard);
@@ -220,7 +228,8 @@ class Game {
     console.log(`Handling action: ${action} Target: ${targetName}`);
   
     const player = this.players[this.currentPlayer];
-    if (this.gameOver || this.awaitingResponse || this.pendingDiscard || player.isDead || player.exchangeCards) return;
+    if (this.gameOver || !player || this.awaitingResponse || this.pendingDiscard ||
+        player.isDead || player.exchangeCards) return;
   
     const target = targetName ? this.players[this.nameIndexMap[targetName]] : null;
   
@@ -265,7 +274,7 @@ class Game {
         return;
   
       case this.actions.ASSASSINATE:
-        if (player.money < 3 || !target || target.isDead) return;
+        if (player.money < 3 || !target || target.isDead || target.name === player.name) return;
         player.money -= 3;
         this.updateGameState();
 
@@ -284,7 +293,7 @@ class Game {
         return;
   
       case this.actions.STEAL:
-        if (!target || target.isDead) return;
+        if (!target || target.isDead || target.name === player.name) return;
   
         this.awaitingResponse = {
           type: 'action',
@@ -315,7 +324,7 @@ class Game {
         return;
   
       case this.actions.COUP:
-        if (player.money < 7 || !target || target.isDead) return;
+        if (player.money < 7 || !target || target.isDead || target.name === player.name) return;
         player.money -= 7;
         if (target.influences.length === 0) target.isDead = true;
         this.broadcast(`${player.name} coups ${target.name}.`);
@@ -339,6 +348,7 @@ class Game {
     const { type, action, actor, target, blocker } = response;
     const actorPlayer = this.players[this.nameIndexMap[actor]];
     const targetPlayer = target ? this.players[this.nameIndexMap[target]] : null;
+    if (!actorPlayer || actorPlayer.isDead) return;
   
     this.awaitingResponse = null;
     this.challengeWindowOpen = false;
@@ -412,6 +422,11 @@ class Game {
   
     if (alivePlayers.length === 1) {
       this.gameOver = true;
+      if (this.challengeTimer) clearTimeout(this.challengeTimer);
+      this.challengeTimer = null;
+      this.awaitingResponse = null;
+      this.challengeWindowOpen = false;
+      this.pendingDiscard = null;
       const winner = alivePlayers[0];
       this.broadcast(`${winner.name} wins the game!`);
       
