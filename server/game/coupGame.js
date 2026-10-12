@@ -4,7 +4,7 @@ const { Actions } = require('./helperConstants');
 const DISCONNECT_GRACE_MS = 60_000;
 
 class Game {
-  constructor(players, sockets, io, lobbyCode) {
+  constructor(players, sockets, io, lobbyCode, onGameOver = () => {}) {
     this.nameSocketMap = buildNameSocketMap(players);
     this.nameIndexMap = buildNameIndexMap(players);
     this.players = buildPlayers(players);
@@ -14,6 +14,7 @@ class Game {
     this.actions = Actions;
     this.io = io;
     this.lobbyCode = lobbyCode;
+    this.onGameOver = onGameOver;
     this.awaitingResponse = null;
     this.challengeWindowOpen = false;
     this.challengeTimer = null;
@@ -533,6 +534,7 @@ class Game {
       this.broadcast(`${winner.name} wins the game!`);
       
       this.io.to(this.lobbyCode).emit('game-over', { winner: winner.name });
+      this.onGameOver();
       return true;
     }
     return false;

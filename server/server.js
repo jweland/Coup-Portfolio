@@ -38,6 +38,21 @@ const userSockets = {};
 
 const MAX_PLAYERS_PER_LOBBY = 6;
 
+function cleanupFinishedGame(lobbyCode, game) {
+  if (games[lobbyCode] !== game) return;
+
+  Object.entries(userSockets).forEach(([socketID, user]) => {
+    if (user.lobby !== lobbyCode) return;
+
+    io.sockets.sockets.get(socketID)?.leave(lobbyCode);
+    delete userSockets[socketID];
+  });
+
+  delete games[lobbyCode];
+  delete lobbies[lobbyCode];
+  console.log(`Game and lobby ${lobbyCode} cleaned up after game over.`);
+}
+
 // Helper function to generate a unique 6-digit code
 function generateSixDigitCode() {
   return Math.floor(100000 + Math.random() * 900000).toString(); 
@@ -434,7 +449,13 @@ io.on('connection', (socket) => {
       socketID: sockets[index]
     }));
 
-    const game = new Game(playersWithSockets, sockets, io, lobbyCode);
+    const game = new Game(
+      playersWithSockets,
+      sockets,
+      io,
+      lobbyCode,
+      () => cleanupFinishedGame(lobbyCode, game)
+    );
     games[lobbyCode] = game;
   
     console.log(`Game instance created for lobby ${lobbyCode}`);

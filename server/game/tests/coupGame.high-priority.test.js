@@ -279,6 +279,17 @@ describe('high-priority Coup rules', () => {
     expect(ioEmit).toHaveBeenCalledWith('game-over', { winner: 'Jillian' });
   });
 
+  test('notifies the server to clean up after game over only once', () => {
+    const onGameOver = jest.fn();
+    game.onGameOver = onGameOver;
+    game.players[1].isDead = true;
+
+    expect(game.checkWinCondition()).toBe(true);
+    expect(game.checkWinCondition()).toBe(true);
+
+    expect(onGameOver).toHaveBeenCalledTimes(1);
+  });
+
   test('rejects an action when the submitting socket user is not the current player', () => {
     const startingMoney = game.players[0].money;
 
