@@ -43,6 +43,7 @@
     min-width: 130px;
     max-width: 160px;
     height: auto;
+    padding: 0.45rem 0.35rem;
     background: linear-gradient(to bottom, #1e3c6e 0%, #162c52 100%);
     color: #e0e6ff;
     margin: 0 1vw;
@@ -73,7 +74,7 @@
 
 .opponent-station .player-name {
     font-size: 1rem;
-    margin-bottom: 0.3vh;
+    margin: 0 0 0.25rem;
 }
 
 /* Display cards in a row */
@@ -90,22 +91,38 @@
 
 /* Adjust card sizes based on station type */
 .opponent-station .card-container {
-    transform: scale(0.55);
-    margin: -3.5vh -1.5vw;
-    transition: all 0.3s ease;
+    flex: 0 1 48%;
+    width: 48%;
+    min-width: 0;
+    margin: 0;
 }
 
 .opponent-station .card-container:hover {
-    transform: scale(0.6);
     z-index: 10;
+}
+
+.opponent-station .card-image {
+    width: 100%;
+    max-width: 64px;
+}
+
+.opponent-station .card-title {
+    font-size: 0.6rem;
+    margin-top: 0.15rem;
+}
+
+.opponent-station .cards-container {
+    gap: 0.2rem;
+    margin-bottom: 0;
 }
 
 /* Make sure wallet takes less space in player station */
 .opponent-station .wallet-container {
-    flex: 1;
+    flex: 0 0 auto;
     max-width: 90px;
     position: relative;
     z-index: 2;
+    margin-top: 0.3rem;
 }
 
 .player-station .card-container {
