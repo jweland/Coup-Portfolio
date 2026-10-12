@@ -9,7 +9,7 @@
   position: relative;
   color: #e0e6ff;
   font-family: 'Segoe UI', 'Roboto', sans-serif;
-  padding-bottom: 8vh;
+  padding-bottom: 1rem;
 }
 
 .game-page::before {
@@ -28,24 +28,34 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 8vh 2vw 6vh;
+  justify-content: center;
+  padding: 2vh 2vw 4vh;
   flex: 1;
-  gap: 2vh;
+  gap: 0.5rem;
   max-height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  position: relative; 
-  z-index: 1
+  position: relative;
+  z-index: 1;
 }
 
-.top-left-buttons {
-  position: absolute;
-  top: 1vh;
-  left: 1vw;
+.game-top-row {
   display: flex;
-  gap: 0.5vw;
-  z-index: 10;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 1400px);
+  gap: 1rem;
+  position: relative;
+  z-index: 2;
+}
+
+.player-log-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1rem;
+  width: min(100%, 1400px);
+  margin: 0 auto;
 }
 
 .small-button {
@@ -69,94 +79,126 @@
 }  
 
 .event-log {
-  position: absolute;
-  top: 1vh;
-  right: 1vw;
-  width: 20vw;
-  max-width: 250px;
-  height: 35vh;
+  position: relative;
+  width: min(22vw, 18rem);
+  min-width: 12rem;
+  max-width: 100%;
+  height: auto;
+  flex: 0 0 auto;
+  align-self: stretch;
+  margin: 0;
   background: rgba(13, 20, 35, 0.8);
   color: #e0e6ff;
-  padding: 1vh 1vw;
-  border-radius: 5px;
+  padding: 0.75rem 0.8rem;
+  border-radius: 8px;
   border: 1px solid #3e71a8;
   box-shadow: 0 0 20px rgba(62, 113, 168, 0.4), inset 0 0 10px rgba(101, 178, 255, 0.1);
   overflow-y: auto;
+  overflow-wrap: anywhere;
   backdrop-filter: blur(5px);
-  z-index: 10;
+  z-index: 2;
 }
 
 .event-log h2 {
-  font-size: 1rem;
-  margin-bottom: 1vh;
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
   border-bottom: 1px solid #3e71a8;
   color: #7dcff7;
-  padding-bottom: 0.5vh;
+  padding-bottom: 0.35rem;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .event-log p {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: #e0e6ff;
   margin: 0.5vh 0;
   text-shadow: 0 0 5px rgba(224, 230, 255, 0.3);
 }  
 
+.bottom-page-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  padding: 0 0.4rem 0.4rem;
+  position: relative;
+  z-index: 2;
+  width: min(100%, 260px);
+  margin: 0 auto;
+}
+
+.bottom-page-buttons .small-button {
+  padding: 0.28rem 0.6rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
 .opponents-container {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 2vw;
-  margin-top: 1vh;
-  width: 90%;
+  gap: 1.2rem;
+  margin-top: 0.5vh;
+  width: min(100%, 900px);
   position: relative;
-}
-
-.opponents-container::before {
-  content: '';
-  position: absolute;
-  top: -5px;
-  left: 50%;
-  width: 50%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #7dcff7, transparent);
-  transform: translateX(-50%);
 }
 
 .player-container {
   display: flex;
   justify-content: center;
-  width: 90%;
-  margin: 2vh 0 0 0;
+  align-items: stretch;
+  width: auto;
+  margin: 0;
   position: relative;
 }
 
-.player-container::before {
-  content: '';
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  width: 70%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #a6e1ff, transparent);
-  transform: translateX(-50%);
+.player-container > .player-station {
+  height: 100%;
+}
+
+.turn-indicator {
+  padding: 0.55rem 1.25rem;
+  border: 1px solid rgba(125, 207, 247, 0.55);
+  border-radius: 999px;
+  background: rgba(13, 20, 35, 0.88);
+  color: #d8e8f5;
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.65);
+}
+
+.turn-indicator.your-turn {
+  border: 1px solid rgba(255, 219, 88, 0.7);
+  background: rgba(89, 67, 12, 0.72);
+  color: #ffdf68;
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 10px rgba(255, 219, 88, 0.22);
 }
 
 .action-buttons-container {
   display: flex;
   justify-content: center;
-  padding: 1vh 1.5vw;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 1vh 1.2vw;
   background: rgba(20, 30, 50, 0.7);
   border-radius: 10px;
-  gap: 0.8vw;
-  width: 90%;
-  max-width: 1000px;
+  gap: 0.7rem;
+  width: min(100%, 1100px);
   border: 1px solid #3e71a8;
   box-shadow: 0 0 20px rgba(62, 113, 168, 0.4), inset 0 0 10px rgba(101, 178, 255, 0.1);
   backdrop-filter: blur(5px);
-  margin-top: 2vh;
-  margin-bottom: 4vh;
+  margin-top: 1vh;
+  margin-bottom: 0;
   position: relative;
   z-index: 5;
   overflow: visible;
@@ -164,23 +206,23 @@
 
 .action-buttons-container button {
   color: white;
-  padding: 1vh 1vw;
+  padding: 0.8vh 0.9vw;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   font-weight: bold;
   transition: all 0.3s ease;
-  font-size: 0.85rem;
+  font-size: clamp(0.7rem, 1vw, 0.85rem);
   white-space: nowrap;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 8.5rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   position: relative;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  height: 4vh;
+  min-height: 2.8rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -257,25 +299,120 @@
 }
 
 @media (max-width: 900px) {
+  .game-layout {
+    max-height: none;
+    overflow: visible;
+    padding: 1rem 1rem 1.5rem;
+    gap: 1rem;
+  }
+
+  .event-log {
+    position: relative;
+    inset: auto;
+    align-self: stretch;
+    width: clamp(11rem, 34vw, 14rem);
+    max-width: none;
+    height: auto;
+    margin: 0;
+  }
+
+  .event-log p {
+    overflow-wrap: anywhere;
+  }
+
+  .opponents-container {
+    width: 100%;
+  }
+
+  .player-log-row {
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  .opponents-container {
+    gap: clamp(0.5rem, 2vw, 1rem);
+  }
+
+  .opponent-station {
+    flex: 1 1 130px;
+    min-width: 0;
+    width: min(100%, 160px);
+    margin: 0;
+  }
+
+  .player-station {
+    width: min(100%, 340px);
+    min-width: 0;
+  }
+
+  .player-station .cards-container {
+    gap: clamp(0.25rem, 2vw, 0.75rem);
+  }
+
+  .player-station .card-container {
+    min-width: 0;
+    margin: 0.5rem 0;
+  }
+
+  .player-station .card-image {
+    width: 100%;
+    max-width: clamp(4.5rem, 15vw, 6.5rem);
+  }
+
   .action-buttons-container {
     width: 95%;
     flex-wrap: wrap;
   }
   
   .action-buttons-container button {
-    padding: 1vh 2vw;
+    padding: 0.6rem 0.75rem;
     margin: 0.5vh 0;
-    flex-basis: 30%;
+    flex: 1 1 clamp(8rem, 28%, 12rem);
+    height: auto;
+    min-height: 2.75rem;
+    white-space: normal;
   }
 }
 
 @media (max-width: 576px) {
+  .opponents-container {
+    width: 100%;
+  }
+
+  .opponent-station {
+    flex-basis: 120px;
+  }
+
+  .event-log {
+    width: min(13rem, calc(100% - 1.5rem));
+    height: auto;
+    flex: 0 1 auto;
+    margin: 0;
+  }
+
+  .player-log-row {
+    flex-wrap: wrap;
+  }
+
+  .player-container {
+    flex: 1 1 100%;
+  }
+
+  .player-log-row .event-log {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .bottom-page-buttons {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
   .action-buttons-container {
     flex-direction: column;
   }
   
   .action-buttons-container button {
     width: 100%;
+    flex-basis: auto;
     margin: 0.5vh 0;
   }
 }
@@ -303,9 +440,21 @@
   box-shadow: 0 0 30px rgba(125, 207, 247, 0.5);
 }
 
+.rules-popup {
+  width: fit-content;
+  max-width: 94vw;
+  max-height: 94vh;
+  max-height: 94svh;
+  overflow: hidden;
+}
+
 .popup-image {
-  width: 100%;
-  height: auto;
+  display: block;
+  width: auto;
+  max-width: 94vw;
+  max-height: 90vh;
+  max-height: 90svh;
+  object-fit: contain;
   border-radius: 10px;
 }
 

@@ -51,9 +51,9 @@
 
 /* Player station */
 .player-station {
-    width: 20vw;
-    min-width: 280px;
-    max-width: 650px;
+    width: min(27vw, 340px);
+    min-width: 250px;
+    max-width: 340px;
     height: auto;
     background: linear-gradient(to bottom, #2a5792 0%, #1e3c6e 100%);
     color: #e0e6ff;
@@ -110,8 +110,9 @@
 
 .player-station .card-container {
     transform: scale(0.9);
-    margin: 2% 1vw 1.5% 1vw;
+    margin: 0.4rem 0.5rem 0.75rem;
     flex: 3;
+    min-width: 0;
     transition: all 0.3s ease;
 }
 

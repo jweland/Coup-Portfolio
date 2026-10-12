@@ -195,16 +195,10 @@ const Game = () => {
         </div>
       )}
 
-      {/* Rules & Cheatsheet buttons */}
-      <div className='top-left-buttons'>
-        <button className='small-button' onClick={() => handleShowPopup('rules')}>Rules</button>
-        <button className='small-button' onClick={() => handleShowPopup('cheatsheet')}>Cheat Sheet</button>
-      </div>
-
       {/* Popup Overlay */}
       {popupImage && (
         <div className="popup-overlay">
-          <div className="popup-content">
+          <div className="popup-content rules-popup">
             <img src={popupImage} alt="Popup" className="popup-image" />
             <button onClick={handleClosePopup} className="close-popup-button">✕</button>
           </div>
@@ -286,37 +280,52 @@ const Game = () => {
         </div>
       )}
 
-      <main className="game-layout">      
-        {/* Opponent Cards */}
-        <div className='opponents-container'>
-          {opponents.map((player, index) => (
-            <PlayerStation 
-              key={index}
-              player={player}
-              isOpponent={true}
-              isTargetable={isSelectingTarget}
-              onTargetClick={(targetName) => {
-                submitAction(pendingAction, targetName);
-                setPendingAction(null);
-                setTimeout(() => setIsSelectingTarget(false), 0);
-              }}
-            />
-          ))}
+      <main className="game-layout">
+        <div className="game-top-row">
+          <div className='opponents-container'>
+            {opponents.map((player, index) => (
+              <PlayerStation
+                key={index}
+                player={player}
+                isOpponent={true}
+                isTargetable={isSelectingTarget}
+                onTargetClick={(targetName) => {
+                  submitAction(pendingAction, targetName);
+                  setPendingAction(null);
+                  setTimeout(() => setIsSelectingTarget(false), 0);
+                }}
+              />
+            ))}
+          </div>
         </div>
 
-        {/* Player Card */}
-        {myPlayer && (
-          <div className='player-container'>
-            <PlayerStation 
-              player={myPlayer}
-              isOpponent={false}
-              influences={myPlayer.influences}
-            />
+        <div className="player-log-row">
+          {myPlayer && (
+            <div className='player-container'>
+              <PlayerStation
+                player={myPlayer}
+                isOpponent={false}
+                influences={myPlayer.influences}
+              />
+            </div>
+          )}
+          <div className="event-log">
+            <h2>Event Log:</h2>
+            {eventLog.length === 0 ? (
+              <p>No game events yet.</p>
+            ) : (
+              eventLog.map((log, idx) => (
+                <p key={idx}>{log}</p>
+              ))
+            )}
           </div>
-        )}
+        </div>
 
         {/* Turn Indicator */}
-        <div className="turn-indicator">
+        <div
+          className={`turn-indicator ${isMyTurn ? 'your-turn' : 'other-turn'}`}
+          aria-live="polite"
+        >
           {currentPlayer
             ? (currentPlayer === userName
                 ? "Your Turn!"
@@ -455,19 +464,13 @@ const Game = () => {
             </div>
           )}
 
+        <div className="bottom-page-buttons">
+          <button className="small-button" onClick={() => handleShowPopup('rules')}>Rules</button>
+          <button className="small-button" onClick={() => handleShowPopup('cheatsheet')}>Cheat Sheet</button>
+        </div>
+
       </main>
 
-      {/* Event Log */}
-      <div className='event-log'>
-        <h2>Event Log:</h2>
-        {eventLog.length === 0 ? (
-          <p>No game events yet.</p>
-        ) : (
-          eventLog.map((log, idx) => (
-            <p key={idx}>{log}</p>
-          ))
-        )}
-      </div>
     </div>
   );
 };

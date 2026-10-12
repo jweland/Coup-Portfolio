@@ -45,10 +45,11 @@
 .player-station .wallet-container {
     padding: 0.5vh 1vw;
     width: auto;
-    max-width: 35%;
-    margin: 0.5vh auto 0;
+    max-width: 50%;
+    margin: 0.25rem auto 0.5rem;
     position: relative;
     overflow: visible;
+    z-index: 3;
 }
 
 .player-station .wallet-container::before {
