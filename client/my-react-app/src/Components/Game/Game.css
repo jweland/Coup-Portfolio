@@ -84,6 +84,8 @@
   min-width: 12rem;
   max-width: 100%;
   height: auto;
+  min-height: 0;
+  max-height: none;
   flex: 0 0 auto;
   align-self: stretch;
   margin: 0;
@@ -93,10 +95,22 @@
   border-radius: 8px;
   border: 1px solid #3e71a8;
   box-shadow: 0 0 20px rgba(62, 113, 168, 0.4), inset 0 0 10px rgba(101, 178, 255, 0.1);
-  overflow-y: auto;
-  overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   backdrop-filter: blur(5px);
   z-index: 2;
+}
+
+.event-log-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
 }
 
 .event-log h2 {
@@ -314,10 +328,11 @@
     width: clamp(11rem, 34vw, 14rem);
     max-width: none;
     height: auto;
+    max-height: none;
     margin: 0;
   }
 
-  .event-log p {
+  .event-log-content p {
     overflow-wrap: anywhere;
   }
 

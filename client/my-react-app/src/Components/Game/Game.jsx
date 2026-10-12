@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import React from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -20,6 +20,9 @@ const Game = () => {
 
   const [players, setPlayers] = useState([]);
   const [eventLog, setEventLog] = useState([]);
+  const eventLogContentRef = useRef(null);
+  const playerStationRef = useRef(null);
+  const [playerStationHeight, setPlayerStationHeight] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
   const [isSelectingTarget, setIsSelectingTarget] = useState(false);
@@ -53,7 +56,7 @@ const Game = () => {
 
   useEffect(() => {
     socket.on('game-log', (log) => {
-      setEventLog(prev => [log, ...prev]);
+      setEventLog(prev => [...prev, log]);
     });
   
     socket.on('awaiting-response', (data) => {
@@ -145,6 +148,11 @@ const Game = () => {
   
     return () => clearTimeout(timer);
   }, [countdown]);
+
+  useLayoutEffect(() => {
+    const content = eventLogContentRef.current;
+    if (content) content.scrollTop = content.scrollHeight;
+  }, [eventLog]);
   
 
   useEffect(() => {
@@ -190,12 +198,25 @@ const Game = () => {
   }, [winner, players]);
 
   const myPlayer = players.find(p => p.name === userName);
+  const hasMyPlayer = Boolean(myPlayer);
   const opponents = players.filter(p => p.name !== userName);
   const isMyTurn = currentPlayer === userName;
   const mustCoup = myPlayer?.money >= 10;
   const actionsBlocked = !isMyTurn || Boolean(
     awaitingResponse || discardPrompt || exchangeOptions || winner || myPlayer?.isDead
   );
+
+  useEffect(() => {
+    const station = playerStationRef.current;
+    if (!station) return undefined;
+
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      setPlayerStationHeight(entry.target.getBoundingClientRect().height);
+    });
+    resizeObserver.observe(station);
+
+    return () => resizeObserver.disconnect();
+  }, [hasMyPlayer]);
 
   return (
     <div className="game-page">
@@ -322,21 +343,27 @@ const Game = () => {
           {myPlayer && (
             <div className='player-container'>
               <PlayerStation
+                stationRef={playerStationRef}
                 player={myPlayer}
                 isOpponent={false}
                 influences={myPlayer.influences}
               />
             </div>
           )}
-          <div className="event-log">
+          <div
+            className="event-log"
+            style={playerStationHeight ? { height: `${playerStationHeight}px` } : undefined}
+          >
             <h2>Event Log:</h2>
-            {eventLog.length === 0 ? (
-              <p>No game events yet.</p>
-            ) : (
-              eventLog.map((log, idx) => (
-                <p key={idx}>{log}</p>
-              ))
-            )}
+            <div className="event-log-content" ref={eventLogContentRef} aria-live="polite">
+              {eventLog.length === 0 ? (
+                <p>No game events yet.</p>
+              ) : (
+                eventLog.map((log, idx) => (
+                  <p key={idx}>{log}</p>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
@@ -432,64 +459,60 @@ const Game = () => {
           </button>
         </div>
 
-        {/* Challenge/Block Overlay*/}
-        {awaitingResponse && (
-          ((awaitingResponse.type === 'action' && userName !== awaitingResponse.actor) ||
-          (awaitingResponse.type === 'block' && userName !== awaitingResponse.blocker)) && (
+        {/* One shared response panel: the claimant/blocker waits; eligible opponents can respond. */}
+        {awaitingResponse && (() => {
+          const isActor = awaitingResponse.type === 'action' && userName === awaitingResponse.actor;
+          const isBlocker = awaitingResponse.type === 'block' && userName === awaitingResponse.blocker;
+          const canChallenge = Boolean(myPlayer && !myPlayer.isDead) &&
+            (awaitingResponse.type === 'block'
+              ? !isBlocker
+              : !isActor && awaitingResponse.challengeable !== false);
+          const canBlock = awaitingResponse.type === 'action' &&
+            (awaitingResponse.action === 'foreign aid'
+              ? !isActor
+              : awaitingResponse.target === userName) &&
+            Boolean(myPlayer && !myPlayer.isDead);
+
+          let responseMessage;
+          if (awaitingResponse.type === 'block') {
+            responseMessage = isBlocker
+              ? `Your block of ${awaitingResponse.action} is awaiting a challenge.`
+              : `${awaitingResponse.blocker} is blocking ${awaitingResponse.action} with ${awaitingResponse.requiredCards.join(' or ')}.`;
+          } else if (isActor) {
+            responseMessage = `Your ${awaitingResponse.action} is pending while other players respond.`;
+          } else {
+            responseMessage = `${awaitingResponse.actor} is attempting to ${awaitingResponse.action}${awaitingResponse.target ? ` against ${awaitingResponse.target}` : ''}.`;
+          }
+
+          return (
             <div className="popup-overlay">
               <div className="popup-content" style={{ padding: '20px', textAlign: 'center', color: 'white' }}>
+                <p style={{ marginBottom: '10px', fontSize: '1.1rem' }}>
+                  {responseMessage}
+                </p>
                 {countdown !== null && (
-                  <p style={{ 
+                  <p style={{
                     marginTop: '10px',
-                    color: countdown <= 3 ? 'red' : 'white', 
+                    color: countdown <= 3 ? 'red' : 'white',
                     fontWeight: countdown <= 3 ? 'bold' : 'normal'
                   }}>
-                    Time left: {countdown}s
+                    {countdown}s remaining
                   </p>
                 )}
-                <p style={{ marginBottom: '20px', fontSize: '1.1rem' }}>
-                  {awaitingResponse.type === 'block'
-                    ? `${awaitingResponse.blocker} is blocking ${awaitingResponse.action} with ${awaitingResponse.requiredCards.join(' or ')}.`
-                    : `${awaitingResponse.actor} is attempting to ${awaitingResponse.action}${awaitingResponse.target ? ` against ${awaitingResponse.target}` : ''}.`}
-                </p>
-
-                {myPlayer && !myPlayer.isDead && (awaitingResponse.type === 'block'
-                  ? userName !== awaitingResponse.blocker
-                  : userName !== awaitingResponse.actor && awaitingResponse.challengeable !== false) && (
+                {canChallenge && (
                   <button className="small-button" onClick={() => socket.emit('challenge')}>
                     Challenge
                   </button>
                 )}
-
-                {awaitingResponse.type === 'action' &&
-                  (awaitingResponse.action === 'foreign aid'
-                    ? userName !== awaitingResponse.actor
-                    : awaitingResponse.target === userName) &&
-                  myPlayer && !myPlayer.isDead && (
+                {canBlock && (
                   <button className="small-button" onClick={() => socket.emit('block')}>
                     Block
                   </button>
                 )}
               </div>
             </div>
-          )
-        )}
-
-        {/* Waiting Timer */}
-        {awaitingResponse && !(
-            (awaitingResponse.type === 'action' && userName === awaitingResponse.actor) ||
-            (awaitingResponse.type === 'block' && userName === awaitingResponse.blocker)
-          ) && (
-            <div className="popup-overlay">
-              <div className="popup-content" style={{ padding: '20px', textAlign: 'center', color: 'white' }}>
-                <p style={{ marginBottom: '10px', fontSize: '1.1rem' }}>
-                  {awaitingResponse.type === 'block'
-                    ? `${awaitingResponse.actor} has ${countdown}s to respond to the block.`
-                    : `${awaitingResponse.actor} has ${countdown}s to be challenged.`}
-                </p>
-              </div>
-            </div>
-          )}
+          );
+        })()}
 
         <div className="bottom-page-buttons">
           <button className="small-button" onClick={() => handleShowPopup('rules')}>Rules</button>

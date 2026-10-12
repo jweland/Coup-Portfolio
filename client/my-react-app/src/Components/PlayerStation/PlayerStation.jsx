@@ -2,7 +2,7 @@ import Card from "../Card/Card";
 import Wallet from "../Wallet/Wallet";
 import './PlayerStation.css';
 
-export default function PlayerStation({ player, isOpponent, influences, isTargetable, onTargetClick }) {
+export default function PlayerStation({ player, isOpponent, influences, isTargetable, onTargetClick, stationRef }) {
   const handleClick = () => {
     if (isTargetable && onTargetClick) {
       onTargetClick(player.name);
@@ -11,6 +11,7 @@ export default function PlayerStation({ player, isOpponent, influences, isTarget
 
   return (
     <div
+      ref={stationRef}
       className={`station ${isOpponent ? 'opponent-station' : 'player-station'} ${isTargetable ? 'targetable' : ''}`}
       onClick={handleClick}
     >
