@@ -53,7 +53,7 @@
     left: 50%;
     transform: translateX(-50%);
     width: 180px;
-    z-index: 10;
+    z-index: 1000;
     transition: opacity 0.3s ease;
     pointer-events: none;
   }
