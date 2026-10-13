@@ -129,10 +129,7 @@ app.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid password" });
     }
 
-    const { password: _, ...userWithoutPassword } = userData;
-
       res.status(200).json({ message: "Login successful!", 
-        user: userData, 
         userId: username, 
         firstName: userData.firstName, 
         lastName: userData.lastName, 
