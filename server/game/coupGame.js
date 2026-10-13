@@ -83,7 +83,6 @@ class Game {
         cards: player.exchangeCards
       });
     }
-    this.broadcast(`${playerName} reconnected.`);
     return true;
   }
 
