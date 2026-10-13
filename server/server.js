@@ -378,6 +378,8 @@ io.on('connection', (socket) => {
     if (!user || user.lobby !== lobbyCode || user.username !== userName || games[lobbyCode]) return;
     if (lobbies[lobbyCode]) {
       lobbies[lobbyCode] = lobbies[lobbyCode].filter(p => p.name !== userName);
+      socket.leave(lobbyCode);
+      delete userSockets[socket.id];
       io.to(lobbyCode).emit('lobby-update', lobbies[lobbyCode]);
   
       if (lobbies[lobbyCode].length === 0) {
